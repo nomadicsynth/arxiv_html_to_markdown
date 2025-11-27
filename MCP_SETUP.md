@@ -45,21 +45,7 @@ Converts an HTML file to a Markdown file.
 
 The exact method to register MCP servers in Cursor may vary by version. Here are common approaches:
 
-### Option 1: Cursor Settings
-
-1. Open Cursor Settings
-2. Look for "MCP Servers", "Tools", or "Custom Tools" section
-3. Add a new server configuration (use the venv's Python interpreter):
-   ```json
-   {
-     "name": "html-to-markdown",
-     "command": "/absolute/path/to/mcp-servers/.venv/bin/python",
-     "args": ["/absolute/path/to/mcp-servers/mcp_html_to_markdown.py"],
-     "env": {}
-   }
-   ```
-
-### Option 2: Configuration File
+### Configuration File
 
 Create or edit a Cursor configuration file (location varies by version):
 - `~/.cursor/mcp.json`
@@ -70,36 +56,22 @@ Example configuration (using the venv's Python):
 ```json
 {
   "mcpServers": {
-    "html-to-markdown": {
-      "command": "/absolute/path/to/mcp-servers/.venv/bin/python",
-      "args": ["/absolute/path/to/mcp-servers/mcp_html_to_markdown.py"]
+    "arxiv-html-to-markdown": {
+      "type": "stdio",
+      "command": "<path/to/arxiv_html_to_markdown>/.venv/bin/python",
+      "args": ["<path/to/arxiv_html_to_markdown>/mcp_html_to_markdown.py"],
+      "env": {}
     }
   }
-}
-```
+}```
 
 **Note:** Replace `/absolute/path/to/mcp-servers` with the actual absolute path to the `mcp-servers` directory.
-
-### Option 3: Direct Import (Alternative)
-
-If MCP setup is complex, you can also use the convenience functions directly in Python code:
-
-```python
-from html_to_markdown import html_to_markdown, html_file_to_markdown
-
-# Convert HTML string
-markdown = html_to_markdown(html_string)
-
-# Convert HTML file
-output_path = html_file_to_markdown("input.html", "output.md")
-```
 
 ## Testing the MCP Server
 
 You can test the MCP server manually (activate venv first):
 
 ```bash
-cd mcp-servers
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # The server uses the official MCP SDK, so it handles protocol automatically
