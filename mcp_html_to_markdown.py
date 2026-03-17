@@ -13,17 +13,20 @@ Usage:
     python mcp_html_to_markdown.py --transport streamable-http --host 0.0.0.0 --port 8000
 
 Environment variables (optional overrides):
-    MCP_TRANSPORT    "stdio" or "streamable-http"
-    FASTMCP_HOST     Bind address for HTTP (default: 0.0.0.0 when using streamable-http)
-    FASTMCP_PORT     Port for HTTP (default: 8000)
+    MCP_TRANSPORT         "stdio" or "streamable-http"
+    FASTMCP_HOST          Bind address for HTTP (default: 0.0.0.0 when using streamable-http)
+    FASTMCP_PORT          Port for HTTP (default: 8000)
+    FASTMCP_ALLOWED_HOSTS Comma-separated Host header values for streamable-http when binding
+                          to 0.0.0.0 (e.g. "arxiv-mcp:*,localhost:*"). Required when binding
+                          to all interfaces; otherwise requests will be rejected (421).
 """
 
 import argparse
 import os
 
-
 from html_to_markdown import html_file_to_markdown, html_to_markdown
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 
 # Create an MCP server
 mcp = FastMCP("html-to-markdown")
@@ -91,11 +94,36 @@ def _parse_args():
     return parser.parse_args()
 
 
+def _transport_security_for_streamable_http(host: str) -> TransportSecuritySettings | None:
+    """Build transport security for streamable-http. When binding to 0.0.0.0, requires
+    FASTMCP_ALLOWED_HOSTS to be set; protection is never disabled by default.
+    """
+    raw = os.environ.get("FASTMCP_ALLOWED_HOSTS", "").strip()
+    if raw:
+        allowed_hosts = [s.strip() for s in raw.split(",") if s.strip()]
+        # Origins for Origin header checks: http://host or http://host:*
+        allowed_origins = [f"http://{h}" for h in allowed_hosts]
+        return TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=allowed_hosts,
+            allowed_origins=allowed_origins,
+        )
+    if host in ("0.0.0.0", "::"):
+        raise SystemExit(
+            "Binding to 0.0.0.0 requires FASTMCP_ALLOWED_HOSTS to be set (e.g. "
+            'FASTMCP_ALLOWED_HOSTS="arxiv-mcp:*,localhost:*"). Refusing to start without it.'
+        )
+    return None  # leave default (localhost-only) when binding to 127.0.0.1 etc.
+
+
 if __name__ == "__main__":
     args = _parse_args()
     if args.transport == "streamable-http":
         mcp.settings.host = args.host
         mcp.settings.port = args.port
+        security = _transport_security_for_streamable_http(args.host)
+        if security is not None:
+            mcp.settings.transport_security = security
         mcp.run(transport="streamable-http")
     else:
         mcp.run()
