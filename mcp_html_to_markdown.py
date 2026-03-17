@@ -22,11 +22,73 @@ Environment variables (optional overrides):
 """
 
 import argparse
+import re
 import os
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
+from urllib.request import Request, urlopen
 
 from html_to_markdown import html_file_to_markdown, html_to_markdown
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
+
+# arXiv HTML base URL; only this domain/path is allowed for fetching
+ARXIV_HTML_BASE = "https://arxiv.org/html"
+# arXiv ID: YYMM.NNNNN or YYMM.NNNNNvN
+ARXIV_ID_PATTERN = re.compile(r"^\d{4}\.\d{4,5}(v\d+)?$")
+FETCH_TIMEOUT_SECONDS = 60
+USER_AGENT = "nomadicsynth-arXiv-html-to-markdown-tool/1.0 (+https://github.com/nomadicsynth/arxiv_html_to_markdown)"
+
+
+def _normalize_arxiv_html_url(arxiv_id_or_url: str) -> str:
+    """Return canonical arXiv HTML URL from an ID or an arxiv.org URL.
+
+    Accepts:
+    - Bare ID: 2512.05397, 2512.05397v2
+    - HTML URL: https://arxiv.org/html/2512.05397v2
+    - Abstract URL: https://arxiv.org/abs/2512.05397 (normalized to HTML)
+
+    Only arxiv.org is allowed. /abs/ URLs are normalized to /html/.
+    """
+    s = arxiv_id_or_url.strip()
+    if not s:
+        raise ValueError("Empty arXiv ID or URL")
+    parsed = urlparse(s)
+    if parsed.scheme and parsed.netloc:
+        netloc = parsed.netloc.lower().lstrip("www.")
+        if netloc != "arxiv.org":
+            raise ValueError("Only arXiv URLs are allowed (arxiv.org)")
+        if parsed.path.startswith("/html/"):
+            id_part = parsed.path[6:].strip("/").split("/")[0]
+        elif parsed.path.startswith("/abs/"):
+            id_part = parsed.path[5:].strip("/").split("/")[0]
+        elif parsed.path.startswith("/pdf/"):
+            id_part = parsed.path[5:].strip("/").split("/")[0]
+        else:
+            raise ValueError(
+                "Only arXiv HTML or abstract or pdf URLs are allowed (/html/... or /abs/... or /pdf/...)"
+            )
+        if not id_part or not ARXIV_ID_PATTERN.match(id_part):
+            raise ValueError("Invalid arXiv ID in URL path")
+        return f"{ARXIV_HTML_BASE}/{id_part}"
+    if not ARXIV_ID_PATTERN.match(s):
+        raise ValueError(
+            "Invalid arXiv ID format (expected e.g. 2512.05397 or 2512.05397v2)"
+        )
+    return f"{ARXIV_HTML_BASE}/{s}"
+
+
+def _fetch_arxiv_html(url: str) -> str:
+    """Download HTML from a validated arXiv URL. Raises on error."""
+    req = Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urlopen(req, timeout=FETCH_TIMEOUT_SECONDS) as resp:
+            return resp.read().decode("utf-8", errors="replace")
+    except HTTPError as e:
+        raise ValueError(f"arXiv returned HTTP {e.code}: {e.reason}") from e
+    except URLError as e:
+        raise ValueError(f"Failed to fetch arXiv URL: {e.reason}") from e
+
 
 # Create an MCP server
 mcp = FastMCP("html-to-markdown")
@@ -68,6 +130,31 @@ def html_file_to_markdown_tool(input_path: str, output_path: str = "") -> str:
         result_path = html_file_to_markdown(input_path, output_path)
 
     return f"Successfully converted {input_path} to {result_path}"
+
+
+@mcp.tool()
+def arxiv_html_to_markdown(arxiv_id_or_url: str) -> str:
+    """Fetch an arXiv paper from its ID or URL and convert the HTML version to Markdown.
+
+    Accepts either an arXiv paper ID or a full arXiv URL. Only downloads from arxiv.org
+    and only the HTML version (abstract and pdf URLs are normalized to HTML). Then converts
+    the LaTeXML-generated HTML to Markdown.
+
+    Args:
+        arxiv_id_or_url: arXiv paper ID (e.g. 2512.05397v2) or full URL, e.g.:
+            - https://arxiv.org/html/2512.05397v2
+            - https://arxiv.org/abs/2512.05397 (will fetch HTML version)
+            - https://arxiv.org/pdf/2512.05397v2.pdf (will fetch HTML version)
+
+    Returns:
+        The converted Markdown content
+
+    Raises:
+        ValueError: If the input is not a valid arXiv ID/URL or fetch fails.
+    """
+    url = _normalize_arxiv_html_url(arxiv_id_or_url)
+    html_content = _fetch_arxiv_html(url)
+    return html_to_markdown(html_content)
 
 
 def _parse_args():
