@@ -12,6 +12,7 @@ COPY html_to_markdown.py mcp_html_to_markdown.py ./
 ENV MCP_TRANSPORT=streamable-http
 ENV FASTMCP_HOST=0.0.0.0
 ENV FASTMCP_PORT=8000
+ENV ARXIV_MCP_CACHE_DIR=/app/cache
 
 EXPOSE 8000
 
