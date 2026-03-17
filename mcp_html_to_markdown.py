@@ -6,13 +6,21 @@ This server exposes the html_to_markdown functionality as a tool
 that AI agents can use via the Model Context Protocol (MCP).
 
 Usage:
+    # Stdio (default, for local MCP clients):
     python mcp_html_to_markdown.py
-    
-The server uses the official MCP Python SDK and communicates via stdio.
+
+    # Streamable HTTP (for Open WebUI and other HTTP MCP clients):
+    python mcp_html_to_markdown.py --transport streamable-http --host 0.0.0.0 --port 8000
+
+Environment variables (optional overrides):
+    MCP_TRANSPORT    "stdio" or "streamable-http"
+    FASTMCP_HOST     Bind address for HTTP (default: 0.0.0.0 when using streamable-http)
+    FASTMCP_PORT     Port for HTTP (default: 8000)
 """
 
-import sys
-from pathlib import Path
+import argparse
+import os
+
 
 from html_to_markdown import html_file_to_markdown, html_to_markdown
 from mcp.server.fastmcp import FastMCP
@@ -59,6 +67,35 @@ def html_file_to_markdown_tool(input_path: str, output_path: str = "") -> str:
     return f"Successfully converted {input_path} to {result_path}"
 
 
+def _parse_args():
+    parser = argparse.ArgumentParser(
+        description="Run the arXiv HTML-to-Markdown MCP server (stdio or streamable-http)."
+    )
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "streamable-http"],
+        default=os.environ.get("MCP_TRANSPORT", "stdio"),
+        help="Transport: stdio (default) or streamable-http",
+    )
+    parser.add_argument(
+        "--host",
+        default=os.environ.get("FASTMCP_HOST", "127.0.0.1"),
+        help="Host for streamable-http (default: 127.0.0.1, use 0.0.0.0 for containers)",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("FASTMCP_PORT", "8000")),
+        help="Port for streamable-http (default: 8000)",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    # Run with stdio transport (default for MCP servers)
-    mcp.run()
+    args = _parse_args()
+    if args.transport == "streamable-http":
+        mcp.settings.host = args.host
+        mcp.settings.port = args.port
+        mcp.run(transport="streamable-http")
+    else:
+        mcp.run()
