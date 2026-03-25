@@ -275,9 +275,9 @@ def html_file_to_markdown_tool(input_path: str, output_path: str = "") -> str:
 @mcp.tool()
 def arxiv_html_to_markdown(arxiv_id_or_url: str) -> str:
     """Fetch an arXiv paper from its ID or URL and convert the HTML version to Markdown.
+    Use whenever you are given an arXiv paper URL to retrieve the paper and convert it to Markdown.
 
-    Accepts either an arXiv paper ID or a full arXiv URL. Only downloads from arxiv.org
-    and only the HTML version (abstract and pdf URLs are normalized to HTML URLs). Then converts
+    Accepts either an arXiv paper ID or a full arXiv URL. Then converts
     the LaTeXML-generated HTML to Markdown.
 
     Args:
